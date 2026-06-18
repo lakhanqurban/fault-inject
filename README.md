@@ -2,29 +2,28 @@
 
 This module injects controlled geometric faults into waypoint-based roads to test ADS robustness under map and geometry corruption scenarios.
 
-Its main aim is to provide a reproducible and configurable way to stress-test driving behavior before full closed-loop evaluation, so failures can be analyzed systematically instead of relying on ad-hoc scenario selection.
+Its main aim is to provide a reproducible and configurable way to stress-test driving behavior before full closed-loop evaluation, so that failures can be analyzed systematically instead of relying on ad-hoc scenario selection.
 
-Core objectives:
+# Core objectives:
 
-- create realistic geometric perturbations that emulate map corruption and localization inconsistencies
-- expose weak points in path tracking, curve handling, and recovery behavior
-- run attacks with deterministic seeds for repeatable experiments
-- keep perturbed roads valid enough for simulation while remaining challenging
+- Create realistic geometric perturbations that emulate map corruption and localization inconsistencies
+- Expose weak points in path tracking, curve handling, and recovery behavior
+- Run attacks with deterministic seeds for repeatable experiments
+- Keep perturbed roads valid enough for simulation while remaining challenging
 
 Attack logic in brief:
 
-- each attack operates directly on waypoint geometry using a dedicated fault model and severity control
+- Each attack operates directly on waypoint geometry using a dedicated fault model and severity control
 - F1 displaces a subset of points (sparse targeted corruption)
 - F2 injects a smooth lateral curvature bump in a selected road window
-- F4 removes waypoint segments, prioritizes difficult regions, then repairs excessive gaps to preserve runnability
-- F5 adds distributed Gaussian perturbation to all waypoints (global noise model)
+- F3 removes waypoint segments, prioritizes difficult regions, then repairs excessive gaps to preserve runnability
+- F4 adds a distributed Gaussian perturbation to all waypoints (global noise model)
 
 ## What It Contains
 
 - `__init__.py`: public exports for package-style imports.
 - `fault_injector.py`: core fault taxonomy, config model, injector logic, and validation helpers.
 - `integrate.py`: integration notes/examples for plugging the injector into a generator pipeline.
-- `dry_run_faults.py`: optional analysis utility.
 - `requirements.txt`: minimal runtime dependency list.
 
 ## Active Fault Set
@@ -90,7 +89,7 @@ Updated behavior:
 
 ![F3 attack visualization placeholder](assets/F3_wp_drop.gif)
 
-### F5 - Noise Injection (Sensor/Map Noise Proxy)
+### F4 - Noise Injection (Sensor/Map Noise Proxy)
 Adds zero-mean Gaussian noise to x/y of all waypoints.
 
 - Severity meaning: Gaussian sigma in meters.
@@ -167,10 +166,7 @@ Approximate guidance from the module presets:
 
 Check `SEVERITY_SWEEPS` and `SEVERITY_LABELS` in `fault_injector.py` for exact values.
 
-
 ## Usage
-
-From repository root:
 
 ```bash
 
