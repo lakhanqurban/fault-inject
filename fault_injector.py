@@ -6,8 +6,8 @@ Systematic perturbation of road waypoint data to evaluate ADS resilience.
 Canonical fault taxonomy:
     F1 — Waypoint Displacement (GPS spoofing)
     F2 — Curvature Injection (sharp curve insertion)
-    F4 — Waypoint Dropout (map data loss)
-    F5 — Noise Injection (Gaussian waypoint noise)
+    F3 — Waypoint Dropout (map data loss)
+    F4 — Noise Injection (Gaussian waypoint noise)
 
 Legacy fault names (F1_gaussian_noise, F2_displacement, etc.) remain
 supported for backward compatibility.
@@ -29,8 +29,8 @@ class FaultType(Enum):
     # Canonical taxonomy (preferred)
     WAYPOINT_DISPLACEMENT = "F1_waypoint_displacement"
     CURVATURE_INJECTION   = "F2_curvature_injection"
-    WAYPOINT_DROPOUT      = "F4_waypoint_dropout"
-    NOISE_INJECTION       = "F5_noise_injection"
+    WAYPOINT_DROPOUT      = "F3_waypoint_dropout"
+    NOISE_INJECTION       = "F4_noise_injection"
 
     # Legacy names (backward compatibility)
     LEGACY_GAUSSIAN_NOISE = "F1_gaussian_noise"
@@ -121,7 +121,7 @@ class FaultInjector:
 
     def inject_with_width(self, road: List[List[float]], road_width: float) -> Tuple[List[List[float]], float]:
         """
-        Apply fault injection to geometry and pass through road width.
+        Apply fault injection to the geometry and pass through the road width.
 
         Returns:
             (perturbed_road, perturbed_road_width)
@@ -129,25 +129,7 @@ class FaultInjector:
         perturbed_road = self.inject(road)
         return perturbed_road, road_width
 
-    # ------------------------------------------------------------------
-    # F5 — Gaussian noise on all x,y coordinates
-    # ------------------------------------------------------------------
-    def _gaussian_noise(self, road, rng):
-        """
-        Add zero-mean Gaussian noise to every waypoint's x and y.
-
-        Severity = noise standard deviation in metres.
-        Calibrated range: 0.05m (mild) to 0.80m (extreme, ~2x segment spacing).
-
-        Threat model: accumulated sensor noise in mapping pipeline,
-        or low-amplitude GPS multipath interference.
-        """
-        sigma = max(0.0, self.config.severity)
-        for wp in road:
-            wp[0] += float(rng.normal(0, sigma))  # x
-            wp[1] += float(rng.normal(0, sigma))  # y
-        return road
-
+    
     # ------------------------------------------------------------------
     # F1 — Targeted waypoint displacement
     # ------------------------------------------------------------------
@@ -281,7 +263,7 @@ class FaultInjector:
         return best_start
 
     # ------------------------------------------------------------------
-    # F4 — Waypoint dropout
+    # F3 — Waypoint dropout
     # ------------------------------------------------------------------
     def _dropout(self, road, rng):
         """
@@ -380,6 +362,24 @@ class FaultInjector:
         drop_set = self._repair_drop_set_for_gap(road, drop_set, max_gap=9.9)
 
         return [wp for i, wp in enumerate(road) if i not in drop_set]
+    # ------------------------------------------------------------------
+    # F4 — Gaussian noise on all x,y coordinates
+    # ------------------------------------------------------------------
+    def _gaussian_noise(self, road, rng):
+        """
+        Add zero-mean Gaussian noise to every waypoint's x and y.
+
+        Severity = noise standard deviation in metres.
+        Calibrated range: 0.05m (mild) to 0.80m (extreme, ~2x segment spacing).
+
+        Threat model: accumulated sensor noise in mapping pipeline,
+        or low-amplitude GPS multipath interference.
+        """
+        sigma = max(0.0, self.config.severity)
+        for wp in road:
+            wp[0] += float(rng.normal(0, sigma))  # x
+            wp[1] += float(rng.normal(0, sigma))  # y
+        return road
 
     def _point_curvatures(self, pts: np.ndarray) -> np.ndarray:
         """Estimate pointwise curvature; endpoints are assigned zero."""
