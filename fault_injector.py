@@ -362,25 +362,7 @@ class FaultInjector:
         drop_set = self._repair_drop_set_for_gap(road, drop_set, max_gap=9.9)
 
         return [wp for i, wp in enumerate(road) if i not in drop_set]
-    # ------------------------------------------------------------------
-    # F4 — Gaussian noise on all x,y coordinates
-    # ------------------------------------------------------------------
-    def _gaussian_noise(self, road, rng):
-        """
-        Add zero-mean Gaussian noise to every waypoint's x and y.
-
-        Severity = noise standard deviation in metres.
-        Calibrated range: 0.05m (mild) to 0.80m (extreme, ~2x segment spacing).
-
-        Threat model: accumulated sensor noise in mapping pipeline,
-        or low-amplitude GPS multipath interference.
-        """
-        sigma = max(0.0, self.config.severity)
-        for wp in road:
-            wp[0] += float(rng.normal(0, sigma))  # x
-            wp[1] += float(rng.normal(0, sigma))  # y
-        return road
-
+    
     def _point_curvatures(self, pts: np.ndarray) -> np.ndarray:
         """Estimate pointwise curvature; endpoints are assigned zero."""
         n = len(pts)
@@ -474,6 +456,24 @@ class FaultInjector:
 
         return drop_set
 
+    # ------------------------------------------------------------------
+    # F4 — Gaussian noise on all x,y coordinates
+    # ------------------------------------------------------------------
+    def _gaussian_noise(self, road, rng):
+        """
+        Add zero-mean Gaussian noise to every waypoint's x and y.
+
+        Severity = noise standard deviation in metres.
+        Calibrated range: 0.05m (mild) to 0.80m (extreme, ~2x segment spacing).
+
+        Threat model: accumulated sensor noise in mapping pipeline,
+        or low-amplitude GPS multipath interference.
+        """
+        sigma = max(0.0, self.config.severity)
+        for wp in road:
+            wp[0] += float(rng.normal(0, sigma))  # x
+            wp[1] += float(rng.normal(0, sigma))  # y
+        return road
 
 # ---------------------------------------------------------------------------
 # Preset severity sweeps
