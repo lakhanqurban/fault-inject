@@ -4,6 +4,8 @@ This module injects controlled geometric faults into waypoint-based roads to tes
 
 Its main aim is to provide a reproducible and configurable way to stress-test driving behavior before full closed-loop evaluation, so that failures can be analyzed systematically instead of relying on ad-hoc scenario selection.
 
+This addresses the problem of **systematic validation of ADS path-tracking and recovery under map corruption**, a gap highlighted in recent ADS safety literature (e.g., NHTSA AV Test Framework, ISO 21448 SOTIF, and academic benchmarks like BDD-OIA and nuScenes corruptions). Unlike prior work that focuses on perception-level perturbations (e.g., camera noise, LiDAR spoofing) or scenario-based testing, this injector targets **map geometry and localization inconsistencies directly**—enabling controlled, reproducible study of how geometric map errors propagate to planning and control failures.
+
 # Core objectives:
 
 - Create realistic geometric perturbations that emulate map corruption and localization inconsistencies
