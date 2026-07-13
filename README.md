@@ -1,114 +1,115 @@
 # ADS Geometric Fault Injector
 
-This module injects controlled geometric faults into waypoint-based roads to test ADS robustness under map and geometry corruption scenarios.
+The ADS Geometric Fault Injector applies controlled corruption to waypoint-based road maps. It makes map and localization errors repeatable so an automated-driving system (ADS) can be evaluated for path tracking, curve handling, and recovery before a full closed-loop campaign.
 
-Its main aim is to provide a reproducible and configurable way to stress-test driving behavior before full closed-loop evaluation, so that failures can be analyzed systematically instead of relying on ad-hoc scenario selection.
+## Problem
 
-This addresses the problem of **systematic validation of ADS path-tracking and recovery under map corruption**, a gap highlighted in recent ADS safety literature (e.g., NHTSA AV Test Framework, ISO 21448 SOTIF, and academic benchmarks like BDD-OIA and nuScenes corruptions). Unlike prior work that focuses on perception-level perturbations (e.g., camera noise, LiDAR spoofing) or scenario-based testing, this injector targets **map geometry and localization inconsistencies directly**—enabling controlled, reproducible study of how geometric map errors propagate to planning and control failures.
+ADS validation commonly emphasizes perception perturbations or hand-picked driving scenarios. This module addresses a different failure mode: **a road map whose waypoint geometry is incomplete, displaced, overly curved, or noisy**. It provides deterministic fault configurations that make it possible to measure how those errors propagate into planning and control failures, while retaining roads that are valid enough to run in the simulator.
 
-# Core objectives:
+The injector is intended to help users:
 
-- Create realistic geometric perturbations that emulate map corruption and localization inconsistencies
-- Expose weak points in path tracking, curve handling, and recovery behavior
-- Run attacks with deterministic seeds for repeatable experiments
-- Keep perturbed roads valid enough for simulation while remaining challenging
+- emulate map corruption and localization inconsistencies;
+- expose weak path tracking, turning, and recovery behavior;
+- compare results across runs using fixed random seeds; and
+- vary attack severity systematically rather than selecting scenarios ad hoc.
 
-Attack logic in brief:
+## Architecture and Data Flow
 
-- Each attack operates directly on waypoint geometry using a dedicated fault model and severity control
-- F1 displaces a subset of points (sparse targeted corruption)
-- F2 injects a smooth lateral curvature bump in a selected road window
-- F3 removes waypoint segments, prioritizes difficult regions, then repairs excessive gaps to preserve runnability
-- F4 adds a distributed Gaussian perturbation to all waypoints (global noise model)
+```mermaid
+flowchart LR
+    A[Road generator or saved waypoint road] --> B[FaultConfig\n+type, severity, seed]
+    B --> C[FaultInjector]
+    A --> C
+    C --> D[Perturbed waypoint road]
+    D --> E[Road validation\n+gap and duplicate checks]
+    E --> F[ADS generator, planner, and controller]
+    F --> G[Udacity simulator]
+    G --> H[Episode logs and fault metrics]
+```
 
-## What It Contains
+`FaultInjector.inject(road)` modifies only the x/y coordinates or the waypoint sequence; waypoint metadata such as z and width is preserved. `main_fault.py` attaches the injector to `RandomTestGenerator`, then records the selected fault type, severity, label, and outcome in its run logs.
 
-- `__init__.py`: public exports for package-style imports.
-- `fault_injector.py`: core fault taxonomy, config model, injector logic, and validation helpers.
-- `integrate.py`: integration notes/examples for plugging the injector into a generator pipeline.
-- `requirements.txt`: minimal runtime dependency list.
+## Algorithms and Libraries
+
+### Fault models
+
+| Fault | Algorithm | Severity |
+| --- | --- | --- |
+| F1 waypoint displacement | Randomly select a fraction of waypoints and move them by a fixed distance in random directions. | Displacement in metres |
+| F2 curvature injection | Add a smooth, lateral sinusoidal bump over a contiguous waypoint window. The window can be placed at peak curvature, an entry region, or randomly. | Maximum lateral amplitude in metres |
+| F3 waypoint dropout | Remove interior waypoints randomly or in contiguous blocks. Contiguous dropout favours high-curvature regions; boundary kinks and gap repair maintain a runnable road. | Fraction of interior waypoints removed |
+| F4 noise injection | Add zero-mean Gaussian noise to every waypoint's x/y coordinates. | Gaussian standard deviation in metres |
+
+### Supporting techniques
+
+- Seeded pseudo-random streams provide reproducible injections.
+- Curvature estimation identifies challenging regions for contiguous dropout.
+- Road validation checks waypoint count, excessive dropout, maximum gaps, and near-duplicate points.
+
+### Libraries
+
+- `numpy>=1.20` is the only dependency required by the injector itself.
+- The full simulator workflow is provided by the repository's root dependency set and uses the Udacity simulator, Gym, SciPy, and the configured ADS model.
+
+## Repository Contents
+
+- `fault_injector.py`: fault taxonomy, configuration, injection algorithms, severity presets, and validation helpers.
+- `dry_run_faults.py`: command-line analysis utility for comparing original and perturbed roads.
+- `integrate.py`: integration reference for adding the injector to a generator pipeline.
+- `tests/test_fault_injector.py`: unit tests.
+- `assets/`: visual examples of the four fault types.
+- `requirements.txt`: injector-only dependency list.
 
 ## Active Fault Set
-
-The active attack taxonomy is now:
 
 - `F1_waypoint_displacement`
 - `F2_curvature_injection`
 - `F3_waypoint_dropout`
 - `F4_noise_injection`
 
-## Core API
+## Fault Visualizations
 
-### `FaultConfig`
-Defines one attack configuration:
+### F1 — Waypoint Displacement
 
-- `fault_type`: which attack to run
-- `severity`: main intensity control
-- `seed`: reproducible random behavior
-- `affected_fraction`: F1 only
-- `window_size`, `inject_at`: F2 only
-- `contiguous`, `dropout_blocks`: F3 only
+![F1 waypoint displacement](assets/F1_wp_displace.gif)
 
-### `FaultInjector`
-Main methods:
+### F2 — Curvature Injection
 
-- `inject(road) -> perturbed_road`
+![F2 curvature injection](assets/F2_curv_inject.gif)
 
-Input road format is a list of waypoints, typically `[x, y, z, width]` (x/y are modified; other fields are preserved).
+### F3 — Waypoint Dropout
 
-## Attack Definitions
+![F3 waypoint dropout](assets/F3_wp_drop.gif)
 
-### F1 - Waypoint Displacement (GPS Spoofing Proxy)
-Randomly selects a fraction of waypoints and shifts each by a fixed magnitude in random directions.
+### F4 — Noise Injection
 
-- Severity meaning: displacement in meters.
-- Useful for: localized coordinate corruption.
+![F4 noise injection](assets/F4_noise_inject.gif)
 
-![F1 attack visualization placeholder](assets/F1_wp_displace.gif)
+## Setup and Run Guide
 
-### F2 - Curvature Injection (Map Geometry Corruption)
-Applies a smooth lateral sinusoidal bump over a contiguous window to create an artificial sharp curve.
+Run the following commands from the repository root (`udacity-test-generation`). Python 3 is required.
 
-- Severity meaning: max lateral bump amplitude in meters.
-- Placement: `peak`, `entry`, or `random`.
-- Useful for: testing turn-following fragility and control stability.
+### 1. Install dependencies
 
-![F2 attack visualization placeholder](assets/F2_curv_inject.gif)
-
-### F3 - Waypoint Dropout (Map Data Loss)
-Removes a fraction of interior waypoints while preserving first/last points.
-
-Updated behavior:
-
-- Random mode: scattered removals.
-- Contiguous mode: one or more contiguous missing blocks (`dropout_blocks`).
-- Contiguous dropout prefers high-curvature regions to create stronger disturbances.
-- Boundary kinks are added around dropped runs to increase local difficulty.
-- Gap-repair logic reinserts points as needed so resulting roads stay within validation gap limits.
-
-- Severity meaning: fraction of interior points removed.
-- Useful for: sparse/corrupted map segments and interpolation stress.
-
-![F3 attack visualization placeholder](assets/F3_wp_drop.gif)
-
-### F4 - Noise Injection (Sensor/Map Noise Proxy)
-Adds zero-mean Gaussian noise to x/y of all waypoints.
-
-- Severity meaning: Gaussian sigma in meters.
-- Useful for: low-to-high amplitude global perturbation.
-
-![F4 attack visualization placeholder](assets/F4_noise_inject.gif)
-
-## Minimal Usage
-
-Install dependencies first:
+For injector development and unit tests only:
 
 ```bash
-pip install -r requirements.txt
+python3 -m pip install -r fault_inject/requirements.txt
 ```
 
+For the complete simulator campaign, install the repository dependencies and the two packages imported directly by `main_fault.py`:
+
+```bash
+python3 -m pip install -r requirements.txt
+python3 -m pip install gym scipy
+```
+
+Then configure the Udacity simulator executable. `main_fault.py` defaults to `/Applications/udacitysimmaxibon.app`; override this with `--udacity-exe-path` when necessary.
+
+### 2. Use the injector in Python
+
 ```python
-from fault_injector import FaultConfig, FaultInjector, FaultType
+from fault_inject.fault_injector import FaultConfig, FaultInjector, FaultType
 
 road = [
     [100.0, 100.0, 0.0, 3.0],
@@ -116,7 +117,7 @@ road = [
     [101.0,  99.2, 0.0, 3.0],
 ]
 
-cfg = FaultConfig(
+config = FaultConfig(
     fault_type=FaultType.WAYPOINT_DROPOUT,
     severity=0.10,
     seed=42,
@@ -124,60 +125,39 @@ cfg = FaultConfig(
     dropout_blocks=2,
 )
 
-injector = FaultInjector(cfg)
-perturbed = injector.inject(road)
+perturbed_road = FaultInjector(config).inject(road)
 ```
 
-Package-style import also works:
+Waypoint inputs are normally `[x, y, z, width]`; only x/y are changed by displacement, curvature, and noise faults.
 
-```python
-from fault_inject import FaultConfig, FaultInjector, FaultType
-```
-
-## Reproducibility
-
-- Injection is deterministic for a fixed config seed.
-- Repeated calls use deterministic per-call stream offsets to avoid identical randomness on every call.
-
-## Validation Helper
-
-Use `validate_road(road, original_len)` for basic sanity checks:
-
-- minimum waypoint count
-- excessive dropout detection
-- max gap threshold
-- near-duplicate waypoint detection
-
-## Run Unit Tests
-
-From repository root:
+### 3. Run unit tests
 
 ```bash
 python3 -m unittest fault_inject.tests.test_fault_injector -v
 ```
 
-## Typical Severity Bands
+### 4. Run simulator campaigns
 
-Approximate guidance from the module presets:
-
-- Mild
-- Moderate
-- Strong
-- Severe
-- Extreme
-
-Check `SEVERITY_SWEEPS` and `SEVERITY_LABELS` in `fault_injector.py` for exact values.
-
-## Usage
+Use `main_fault.py`, which defines the `--fault-*` command-line options. Each run writes logs under `logs/fault_inject/` by default.
 
 ```bash
+python3 main_fault.py --fault-type F1_waypoint_displacement --fault-severity 0.5 --fault-label moderate
 
-python3 main.py --fault-type F1_waypoint_displacement --fault-severity 0.5 --fault-label moderate
+python3 main_fault.py --fault-type F2_curvature_injection --fault-severity 1.2 --fault-label strong --fault-inject-at peak --fault-window-size 12
 
-python3 main.py --fault-type F2_curvature_injection --fault-severity 1.2 --fault-label strong --fault-inject-at peak --fault-window-size 12
+python3 main_fault.py --fault-type F3_waypoint_dropout --fault-severity 0.10 --fault-label strong --fault-contiguous-dropout
 
-python3 main.py --fault-type F3_waypoint_dropout --fault-severity 0.10 --fault-label strong --fault-contiguous-dropout
-
-python3 main.py --fault-type F4_noise_injection --fault-severity 0.1 --fault-label moderate
-
+python3 main_fault.py --fault-type F4_noise_injection --fault-severity 0.1 --fault-label moderate
 ```
+
+Add `--udacity-exe-path /path/to/simulator` if the simulator is not installed at the default path. Use `--num-episodes N` to control the number of simulator episodes. Pass `--fault-type baseline` (the default) to run without injection.
+
+## Reproducibility and Validation
+
+- A fixed configuration seed produces deterministic fault injection.
+- Repeated injector calls use deterministic per-call offsets so consecutive roads do not receive identical random perturbations.
+- Use `validate_road(road, original_len)` to check basic post-injection road sanity.
+
+## Severity Presets
+
+The module provides five labels—`mild`, `moderate`, `strong`, `severe`, and `extreme`. Exact per-fault values are defined by `SEVERITY_SWEEPS` in `fault_injector.py`.
